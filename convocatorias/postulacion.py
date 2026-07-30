@@ -211,3 +211,95 @@ def mostrar_convocatorias(obtener_conexion):
         use_container_width=True,
         hide_index=True,
     )
+
+
+def mostrar_reportes(obtener_conexion):
+    """Muestra estadísticas y reportes analíticos basados en consultas agregadas."""
+    st.header("📊 Reportes y Estadísticas del Sistema")
+
+    sub_opcion = st.radio(
+        "Selecciona el reporte a consultar:",
+        [
+            "📈 Cantidad de postulaciones por convocatoria",
+            "🏛️ Universidades con más de 2 convenios activos",
+            "🎯 Convocatorias con exigencia de PAPA superior al promedio de postulantes",
+        ],
+        key="sub_menu_reportes",
+    )
+
+    conn = obtener_conexion()
+
+    if sub_opcion == "📈 Cantidad de postulaciones por convocatoria":
+        st.subheader("📈 Total de Postulaciones por Convocatoria")
+        query_4 = """
+            SELECT
+                c.id_convocatoria        AS "ID Convocatoria",
+                c.nombre_convocatoria    AS "Convocatoria",
+                COUNT(p.id_postulacion)  AS "Total Postulaciones"
+            FROM Postulaciones p
+            JOIN Convocatorias c ON p.id_convocatoria = c.id_convocatoria
+            GROUP BY c.id_convocatoria, c.nombre_convocatoria
+            ORDER BY COUNT(p.id_postulacion) DESC;
+        """
+        df4 = pd.read_sql(query_4, conn)
+
+        if not df4.empty:
+            st.dataframe(df4, use_container_width=True, hide_index=True)
+            # Gráfico de barras interactivo
+            st.bar_chart(df4.set_index("Convocatoria")["Total Postulaciones"])
+        else:
+            st.info("No hay datos de postulaciones por convocatoria.")
+
+    elif sub_opcion == "🏛️ Universidades con más de 2 convenios activos":
+        st.subheader("🏛️ Universidades Socias Destacadas (> 2 Convenios Activos)")
+        query_6 = """
+            SELECT
+                us.id_universidad   AS "ID Universidad",
+                us.nombre_oficial    AS "Universidad Socia",
+                COUNT(c.id_convenio) AS "Total Convenios Activos"
+            FROM Universidades_socias us
+            JOIN Convenios c ON us.id_universidad = c.id_universidad
+            WHERE c.estado_legal = 'Activo'
+            GROUP BY us.id_universidad, us.nombre_oficial
+            HAVING COUNT(c.id_convenio) > 2
+            ORDER BY COUNT(c.id_convenio) DESC;
+        """
+        df6 = pd.read_sql(query_6, conn)
+
+        if not df6.empty:
+            st.dataframe(df6, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay universidades socias con más de 2 convenios activos.")
+
+    elif sub_opcion == "🎯 Convocatorias con exigencia de PAPA superior al promedio de postulantes":
+        st.subheader("🎯 Convocatorias con PAPA Exigido Alto (> Promedio de Postulantes)")
+        query_10 = """
+            SELECT
+                c.id_convocatoria       AS "ID Convocatoria",
+                c.nombre_convocatoria   AS "Convocatoria",
+                c.papa_minimo_requerido AS "PAPA Mínimo Requerido",
+                ROUND((
+                    SELECT AVG(e.papa_acumulado)
+                    FROM Postulaciones p
+                    JOIN Estudiantes e ON e.id_estudiante = p.id_estudiante
+                    WHERE p.id_convocatoria = c.id_convocatoria
+                ), 2) AS "PAPA Promedio Postulantes"
+            FROM Convocatorias c
+            WHERE c.papa_minimo_requerido > (
+                SELECT AVG(e.papa_acumulado)
+                FROM Postulaciones p
+                JOIN Estudiantes e ON e.id_estudiante = p.id_estudiante
+                WHERE p.id_convocatoria = c.id_convocatoria
+            )
+            ORDER BY c.papa_minimo_requerido DESC;
+        """
+        df10 = pd.read_sql(query_10, conn)
+
+        if not df10.empty:
+            st.dataframe(df10, use_container_width=True, hide_index=True)
+        else:
+            st.info(
+                "No hay convocatorias donde el PAPA requerido sea superior al promedio de sus postulantes."
+            )
+
+    conn.close()

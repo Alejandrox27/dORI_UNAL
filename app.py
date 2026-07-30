@@ -11,6 +11,7 @@ from convocatorias.postulacion import (
     mostrar_convenios,
     mostrar_convocatorias,
     mostrar_postulacion,
+    mostrar_reportes,
 )
 
 # 1. Configuración de título en la web
@@ -48,7 +49,12 @@ with tab1:
 with tab2:
     opcion = st.selectbox(
         "¿Qué deseas hacer?",
-        ["Ver Convocatorias", "Ver Convenios", "Nueva Postulación"],
+        [
+            "Ver Convocatorias",
+            "Ver Convenios",
+            "📊 Reportes y Estadísticas",
+            "Nueva Postulación",
+        ],
         key="menu_convocatorias",
     )
 
@@ -56,5 +62,7 @@ with tab2:
         mostrar_convocatorias(obtener_conexion)
     elif opcion == "Ver Convenios":
         mostrar_convenios(obtener_conexion)
+    elif opcion == "📊 Reportes y Estadísticas":
+        mostrar_reportes(obtener_conexion)
     elif opcion == "Nueva Postulación":
         mostrar_postulacion(obtener_conexion)
