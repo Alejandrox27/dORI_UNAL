@@ -7,7 +7,11 @@ import convocatorias.postulacion
 # Forzar recarga del submódulo para desarrollos en Streamlit
 importlib.reload(convocatorias.postulacion)
 
-from convocatorias.postulacion import mostrar_convenios, mostrar_postulacion
+from convocatorias.postulacion import (
+    mostrar_convenios,
+    mostrar_convocatorias,
+    mostrar_postulacion,
+)
 
 # 1. Configuración de título en la web
 st.title("🎓 Sistema de Movilidad - ORI UNAL")
@@ -44,11 +48,13 @@ with tab1:
 with tab2:
     opcion = st.selectbox(
         "¿Qué deseas hacer?",
-        ["Ver Convenios", "Nueva Postulación"],
+        ["Ver Convocatorias", "Ver Convenios", "Nueva Postulación"],
         key="menu_convocatorias",
     )
 
-    if opcion == "Ver Convenios":
+    if opcion == "Ver Convocatorias":
+        mostrar_convocatorias(obtener_conexion)
+    elif opcion == "Ver Convenios":
         mostrar_convenios(obtener_conexion)
     elif opcion == "Nueva Postulación":
         mostrar_postulacion(obtener_conexion)
