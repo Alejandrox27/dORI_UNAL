@@ -12,5 +12,5 @@ def mostrar_postulacion(obtener_conexion=None):
         btn_guardar = st.form_submit_button("Registrar Postulación")
         
         if btn_guardar:
-            # Aquí ejecutas el INSERT INTO postulaciones...
+            # sql
             st.success("¡Postulación registrada con éxito!")
