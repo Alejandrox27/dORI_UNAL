@@ -10,9 +10,9 @@ def obtener_conexion():
     return psycopg2.connect(
         host="localhost",
         port="5432", # o 3306 según tu config de Postgres
-        database="dori_unal",
+        database="db_dori_unal",
         user="postgres",
-        password="pass123"
+        password="JDM_RaspBerryPi68"
     )
 
 # 3. Crear pestañas visuales para la UI
@@ -23,7 +23,7 @@ with tab1:
     
     # Consulta a PostgreSQL
     conn = obtener_conexion()
-    query = "SELECT id_estudiante, nombre_completo, papa_acumulado, creditos_aprobados FROM estudiantes;"
+    query = "SELECT id_estudiante, nombre, apellidos, papa_acumulado, creditos_aprobados FROM estudiantes;"
     
     # Cargar datos en un DataFrame y mostrar la tabla visualmente
     df_estudiantes = pd.read_sql(query, conn)
