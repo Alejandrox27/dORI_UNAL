@@ -157,7 +157,7 @@ def postulacion_estudiante(obtener_conexion=None):
             )
 
         st.caption("Nota: Los campos marcados con (*) son obligatorios.")
-        btn_envio = st.form_submit_button("💾 Guardar Datos y Buscar Convocatorias", use_container_width=True)
+        btn_envio = st.form_submit_button("Guardar Datos y Buscar Convocatorias")
 
     # 3. Validación y Guardado en Base de Datos
     if btn_envio:
@@ -211,9 +211,31 @@ def postulacion_estudiante(obtener_conexion=None):
                 )
             )
             conn.commit()
-            st.success("Datos del estudiante guardados y actualizados con éxito en la base de datos")
+            st.success("Datos del estudiante guardados y actualizados con éxito en la base de datos.")
 
-            # 4. Consultar convocatorias disponibles para el estudiante
+            # Guardar información del estudiante en la sesión para el formulario de inscripción
+            st.session_state["estudiante_activo"] = {
+                "id_estudiante": estudiante_id,
+                "nombre": f"{nombre_estudiante.strip()} {apellidos_estudiante.strip()}",
+                "programa_id": programa_id,
+                "papa": papa_acumulado,
+                "creditos": creditos_aprobados
+            }
+
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            st.error(f"Error al procesar los datos del estudiante: {e}")
+            return
+
+    # 4. Si hay un estudiante activo en la sesión, buscar y mostrar sus convocatorias disponibles
+    if "estudiante_activo" in st.session_state and st.session_state["estudiante_activo"]["id_estudiante"] > 0:
+        est_info = st.session_state["estudiante_activo"]
+        try:
+            conn = obtener_conexion()
+            cursor = conn.cursor()
+
             query_convocatorias = """
                 SELECT 
                     c.id_convocatoria AS "ID",
@@ -242,20 +264,173 @@ def postulacion_estudiante(obtener_conexion=None):
                     )
                 ORDER BY c.fecha_cierre ASC;
             """
-            cursor.execute(query_convocatorias, (programa_id, papa_acumulado, creditos_aprobados, estudiante_id))
+            cursor.execute(
+                query_convocatorias,
+                (est_info["programa_id"], est_info["papa"], est_info["creditos"], est_info["id_estudiante"])
+            )
             columnas = [desc[0] for desc in cursor.description]
             filas = cursor.fetchall()
 
             cursor.close()
             conn.close()
 
+            st.markdown("---")
             st.markdown("### Convocatorias Habilitadas para Ti")
             if filas:
                 df_convocatorias = pd.DataFrame(filas, columns=columnas)
                 st.metric("Convocatorias disponibles", len(df_convocatorias))
                 st.dataframe(df_convocatorias, use_container_width=True)
+
+                st.markdown("---")
+                st.subheader("Inscribirse a una Convocatoria")
+                st.write("Selecciona una de las convocatorias habilitadas de la lista para registrar tu postulación:")
+
+                # Crear mapa de opciones para el selectbox
+                opciones_convocatorias = {
+                    f"{row[0]} - {row[1]} ({row[3]})": row[0] for row in filas
+                }
+
+                with st.form("form_inscribirse_convocatoria"):
+                    conv_seleccionada_label = st.selectbox(
+                        "Selecciona la Convocatoria *",
+                        options=list(opciones_convocatorias.keys())
+                    )
+                    prioridad_opcion = st.selectbox(
+                        "Prioridad de Opción *",
+                        options=[1, 2, 3],
+                        help="1 = Primera opción, 2 = Segunda opción, 3 = Tercera opción"
+                    )
+
+                    btn_postular = st.form_submit_button(" Confirmar y Registrar Postulación")
+
+                if btn_postular:
+                    id_convocatoria_elegida = opciones_convocatorias[conv_seleccionada_label]
+                    try:
+                        conn = obtener_conexion()
+                        cursor = conn.cursor()
+
+                        # Registrar la postulación mediante el procedimiento almacenado sp_registrar_postulacion
+                        cursor.execute(
+                            "CALL sp_registrar_postulacion(%s, %s, %s);",
+                            (est_info["id_estudiante"], id_convocatoria_elegida, prioridad_opcion)
+                        )
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+
+                        st.success(
+                            f"¡Postulación registrada con éxito! La postulación ha quedado registrada con estado 'Enviada' para el estudiante {est_info['id_estudiante']}."
+                        )
+                        st.info("Puedes verificar tus postulaciones activas en la pestaña **'Mis Postulaciones'**.")
+
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "llave duplicada" in error_msg.lower() or "duplicate key" in error_msg.lower():
+                            try:
+                                conn = obtener_conexion()
+                                cursor = conn.cursor()
+                                cursor.execute("SELECT setval(pg_get_serial_sequence('historico_estados_postulacion', 'id_historico'), COALESCE((SELECT MAX(id_historico) FROM historico_estados_postulacion), 1));")
+                                cursor.execute("SELECT setval(pg_get_serial_sequence('postulaciones', 'id_postulacion'), COALESCE((SELECT MAX(id_postulacion) FROM postulaciones), 1));")
+                                conn.commit()
+                                
+                                cursor.execute(
+                                    "CALL sp_registrar_postulacion(%s, %s, %s);",
+                                    (est_info["id_estudiante"], id_convocatoria_elegida, prioridad_opcion)
+                                )
+                                conn.commit()
+                                cursor.close()
+                                conn.close()
+
+                                st.success(
+                                    f"¡Postulación registrada con éxito! La postulación ha quedado registrada con estado 'Enviada' para el estudiante {est_info['id_estudiante']}."
+                                )
+                                st.info("Puedes verificar tus postulaciones activas en la pestaña **'Mis Postulaciones'**.")
+                                return
+                            except Exception as retry_err:
+                                error_msg = str(retry_err)
+
+                        if "ya esta postulado" in error_msg.lower():
+                            st.warning("Ya estás postulado a esta convocatoria.")
+                        elif "maximo permitido" in error_msg.lower():
+                            st.warning("Has alcanzado el límite máximo permitido de postulaciones activas para este periodo.")
+                        else:
+                            st.error(f"No se pudo registrar la postulación: {error_msg}")
+
             else:
-                st.warning(" No se encontraron convocatorias activas que cumplan con tus requisitos académicos actuales (PAPA o % de créditos mínimos).")
+                st.warning("No se encontraron convocatorias activas que cumplan con tus requisitos académicos actuales (PAPA o % de créditos mínimos).")
 
         except Exception as e:
-            st.error(f"Error al procesar la solicitud: {e}")
+            st.error(f"Error al consultar convocatorias: {e}")
+
+
+def mostrar_mis_postulaciones(obtener_conexion=None):
+    st.markdown("### Mis Postulaciones")
+    st.caption("Consulta el estado actual de tus postulaciones ingresando tu número de documento de identidad.")
+
+    if obtener_conexion is None:
+        st.error("No se proporcionó una función de conexión a la base de datos.")
+        return
+
+    with st.form("form_buscar_mis_postulaciones"):
+        doc_estudiante = st.number_input(
+            "Documento de Identidad (CC / TI) *",
+            min_value=0,
+            step=1,
+            help="Ingresa el documento con el que te postulaste."
+        )
+        btn_consultar = st.form_submit_button(" Consultar Mis Postulaciones")
+
+    if btn_consultar:
+        if doc_estudiante <= 0:
+            st.error("Por favor ingresa un número de documento válido.")
+            return
+
+        try:
+            conn = obtener_conexion()
+            cursor = conn.cursor()
+
+            # Consultar información del estudiante
+            cursor.execute(
+                "SELECT nombre, apellidos, correo_institucional FROM estudiantes WHERE id_estudiante = %s;",
+                (doc_estudiante,)
+            )
+            est_data = cursor.fetchone()
+
+            # Consultar las postulaciones del estudiante
+            query_mis_postulaciones = """
+                SELECT 
+                    p.id_postulacion AS "ID Postulación",
+                    c.nombre_convocatoria AS "Convocatoria",
+                    us.nombre_oficial AS "Universidad Destino",
+                    COALESCE(pais.nombre_oficial, 'No especificado') AS "País",
+                    c.periodo_academico AS "Periodo",
+                    p.prioridad_opcion AS "Prioridad",
+                    p.fecha_postulacion AS "Fecha Postulación",
+                    p.estado_actual AS "Estado Actual"
+                FROM postulaciones p
+                JOIN convocatorias c ON c.id_convocatoria = p.id_convocatoria
+                JOIN convenios conv ON conv.id_convenio = c.id_convenio
+                JOIN universidades_socias us ON us.id_universidad = conv.id_universidad
+                LEFT JOIN paises pais ON pais.id_pais = us.pais
+                WHERE p.id_estudiante = %s
+                ORDER BY p.fecha_postulacion DESC;
+            """
+            cursor.execute(query_mis_postulaciones, (doc_estudiante,))
+            columnas = [desc[0] for desc in cursor.description]
+            filas = cursor.fetchall()
+
+            cursor.close()
+            conn.close()
+
+            if est_data:
+                st.success(f"Estudiante: **{est_data[0]} {est_data[1]}** ({est_data[2]}) | Documento: `{doc_estudiante}`")
+            
+            if filas:
+                df_post = pd.DataFrame(filas, columns=columnas)
+                st.metric("Total de Postulaciones", len(df_post))
+                st.dataframe(df_post, use_container_width=True)
+            else:
+                st.info(f"No se encontraron postulaciones registradas para el documento {doc_estudiante}.")
+
+        except Exception as e:
+            st.error(f"Error al consultar postulaciones: {e}")

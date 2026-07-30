@@ -23,7 +23,10 @@ from convocatorias.postulacion import (
     mostrar_convocatorias,
     mostrar_reportes,
 )
-from estudiantes.buscar_postulaciones import postulacion_estudiante
+from estudiantes.buscar_postulaciones import (
+    postulacion_estudiante,
+    mostrar_mis_postulaciones,
+)
 
 # 2. Inyección de CSS personalizado para armonizar con el Escudo de la UNAL
 st.markdown(
@@ -196,11 +199,9 @@ def obtener_conexion():
 
 
 # 6. Pestañas visuales para la UI
-tab1, tab2, tab3 = st.tabs([" Estudiantes", " Convocatorias", " Histórico"])
+tab1, tab2, tab3 = st.tabs(["🎓 Estudiantes", "📢 Convocatorias", "📋 Mis Postulaciones"])
 
 with tab1:
-    st.header("Listado de Estudiantes Postulantes")
-    
     postulacion_estudiante(obtener_conexion)
 
 with tab2:
@@ -222,8 +223,7 @@ with tab2:
         mostrar_reportes(obtener_conexion)
 
 with tab3:
-    st.header("Histórico de Movilidad")
-    st.info("Sección de registros históricos de convocatorias y postulaciones.")
+    mostrar_mis_postulaciones(obtener_conexion)
 
 # 7. Pie de página (Footer) con los créditos del proyecto
 st.markdown(
