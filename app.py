@@ -12,8 +12,11 @@ st.set_page_config(
 )
 
 import convocatorias.postulacion
-# Forzar recarga del submódulo para desarrollos en Streamlit
+import estudiantes.buscar_postulaciones
+
+# Forzar recarga de submódulos para desarrollos en Streamlit
 importlib.reload(convocatorias.postulacion)
+importlib.reload(estudiantes.buscar_postulaciones)
 
 from convocatorias.postulacion import (
     mostrar_convenios,
@@ -21,6 +24,7 @@ from convocatorias.postulacion import (
     mostrar_postulacion,
     mostrar_reportes,
 )
+from estudiantes.buscar_postulaciones import postulacion_estudiante
 
 # 2. Inyección de CSS personalizado para armonizar con el Escudo de la UNAL
 st.markdown(
@@ -197,15 +201,8 @@ tab1, tab2, tab3 = st.tabs([" Estudiantes", " Convocatorias", " Histórico"])
 
 with tab1:
     st.header("Listado de Estudiantes Postulantes")
-
-    try:
-        conn = obtener_conexion()
-        query = "SELECT id_estudiante, nombre, apellidos, papa_acumulado, creditos_aprobados FROM estudiantes;"
-        df_estudiantes = pd.read_sql(query, conn)
-        conn.close()
-        st.dataframe(df_estudiantes, use_container_width=True)
-    except Exception as e:
-        st.error(f"No se pudo conectar a la base de datos: {e}")
+    
+    postulacion_estudiante(obtener_conexion)
 
 with tab2:
     opcion = st.selectbox(
