@@ -21,7 +21,6 @@ importlib.reload(estudiantes.buscar_postulaciones)
 from convocatorias.postulacion import (
     mostrar_convenios,
     mostrar_convocatorias,
-    mostrar_postulacion,
     mostrar_reportes,
 )
 from estudiantes.buscar_postulaciones import postulacion_estudiante
@@ -211,7 +210,6 @@ with tab2:
             "Ver Convocatorias",
             "Ver Convenios",
             "Reportes y Estadísticas",
-            "Nueva Postulación",
         ],
         key="menu_convocatorias",
     )
@@ -222,8 +220,6 @@ with tab2:
         mostrar_convenios(obtener_conexion)
     elif opcion == "Reportes y Estadísticas":
         mostrar_reportes(obtener_conexion)
-    elif opcion == "Nueva Postulación":
-        mostrar_postulacion(obtener_conexion)
 
 with tab3:
     st.header("Histórico de Movilidad")
