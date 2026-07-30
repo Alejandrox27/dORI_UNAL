@@ -106,7 +106,7 @@ def mostrar_convocatorias(obtener_conexion):
             conv.id_convocatoria            AS "ID Convocatoria",
             conv.nombre_convocatoria        AS "Nombre Convocatoria",
             u.nombre_oficial                AS "Universidad Socia",
-            p.nombre_oficial                AS "Pais",
+            p.nombre_oficial                 AS "Pais",
             conv.periodo_academico          AS "Periodo",
             c.codigo_convenio               AS "Codigo Convenio",
             c.tipo_convenio                 AS "Tipo Convenio",

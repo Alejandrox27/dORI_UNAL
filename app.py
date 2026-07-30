@@ -191,7 +191,7 @@ def obtener_conexion():
         port="5432",
         database="db_dori_unal",
         user="postgres",
-        password="JDM_RaspBerryPi68",
+        password=st.secrets["database"]["password"],
     )
 
 
