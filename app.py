@@ -2,6 +2,7 @@ import streamlit as st
 import psycopg2
 import pandas as pd
 from convocatorias.postulacion import mostrar_postulacion
+from estudiantes.buscar_postulaciones import postulacion_estudiante
 
 # 1. Configuración de título en la web
 st.title("🎓 Sistema de Movilidad - ORI UNAL")
@@ -22,16 +23,7 @@ tab1, tab2, tab3 = st.tabs(["🎓 Estudiantes", "📢 Convocatorias", "📊 Hist
 with tab1:
     st.header("Listado de Estudiantes Postulantes")
     
-    # Consulta a PostgreSQL
-    conn = obtener_conexion()
-    query = "SELECT id_estudiante, nombre, apellidos, papa_acumulado, creditos_aprobados FROM estudiantes;"
-    
-    # Cargar datos en un DataFrame y mostrar la tabla visualmente
-    df_estudiantes = pd.read_sql(query, conn)
-    conn.close()
-    
-    # ¡Esta sola línea crea una tabla interactiva en la pantalla!
-    st.dataframe(df_estudiantes)
+    postulacion_estudiante(obtener_conexion)
 
 with tab2:
     mostrar_postulacion(obtener_conexion)
