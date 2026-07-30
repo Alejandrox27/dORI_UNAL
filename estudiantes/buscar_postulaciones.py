@@ -2,58 +2,260 @@ import streamlit as st
 import pandas as pd
 
 def postulacion_estudiante(obtener_conexion=None):
-    st.header("¿A qué convocatorias puedes postularte?")
-    # Formulario para insertar datos del estuidante
-    # y obtener convocatorias disponibles para dicho estudiante
-    with st.form("form_estudiante_postulacion"):
-        estudiante_id = st.number_input("Documento del Estudiante", step=1)
-        unidad_organizacional_id = st.number_input("ID Unidad Organizacional", min_value=1)
-        nombre_estudiante = st.text_input("Nombre del Estudiante")
-        apellidos_estudiante = st.text_input("Apellidos del Estudiante")
-        correo_instucional = st.text_input("Correo Institucional")
-        papa_acumulado = st.number_input("PAPA Acumulado", min_value=0.0, max_value=5.0, step=0.01)
-        creditos_aprobados = st.number_input("Créditos Aprobados", min_value=0)
-        #prioridad = st.selectbox("Prioridad de Opción", [1, 2, 3])
-        
-        # Botón de envío
-        btn_envio = st.form_submit_button("Registrar Postulación")
-        
-        if btn_envio:
-            # sql
+    st.markdown("### Registro de Estudiante y Convocatorias Disponibles")
+    st.caption("Selecciona tu Sede, Facultad y Programa académico para identificar las convocatorias a las que puedes postularte según tus méritos académicos.")
+
+    if obtener_conexion is None:
+        st.error("No se proporcionó una función de conexión a la base de datos.")
+        return
+
+    # 1. Cargar unidades organizacionales en cascada (Sede -> Facultad -> Programa)
+    try:
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+
+        # Cargar Sedes
+        cursor.execute("SELECT id_unidad, nombre FROM unidades_organizacionales WHERE tipo = 'Sede' ORDER BY nombre;")
+        sedes = cursor.fetchall()
+
+    except Exception as e:
+        st.error(f"Error al conectar con la base de datos: {e}")
+        return
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
+    if not sedes:
+        st.warning("No se encontraron Sedes registradas en la base de datos.")
+        return
+
+    st.subheader("1. Selección de Unidad Organizacional")
+    col_sede, col_fac, col_prog = st.columns(3)
+
+    with col_sede:
+        sede_seleccionada = st.selectbox(
+            "Sede / Ciudad *",
+            options=sedes,
+            format_func=lambda s: s[1],
+            key="select_sede"
+        )
+        sede_id = sede_seleccionada[0] if sede_seleccionada else None
+
+    # Cargar Facultades de la Sede seleccionada
+    facultades = []
+    if sede_id:
+        try:
             conn = obtener_conexion()
             cursor = conn.cursor()
-            query_insert = """INSERT INTO estudiantes (id_estudiante, id_unidad_organizacional, nombre, apellidos, correo_institucional, papa_acumulado, creditos_aprobados)
-                              VALUES (%s, %s, %s, %s, %s, %s, %s)"""
-
-            cursor.execute(query_insert, (estudiante_id, unidad_organizacional_id, nombre_estudiante, apellidos_estudiante, correo_instucional, papa_acumulado, creditos_aprobados))
-            cursor.connection.commit()
-
-
-            query = """SELECT
-                        c.id_convocatoria,
-                        c.nombre_convocatoria
-                    FROM estudiantes e
-                    JOIN unidades_organizacionales u 
-                        ON u.id_unidad = e.id_unidad_organizacional
-                    JOIN postulaciones p 
-                        ON p.id_estudiante = e.id_estudiante
-                    JOIN convocatorias c 
-                        ON c.id_convocatoria = p.id_convocatoria
-                    WHERE
-                        e.id_estudiante = """ + str(estudiante_id) + """
-                        AND 
-                        e.papa_acumulado >= GREATEST(COALESCE(c.papa_minimo_requerido, 3.5), 3.5)
-                        AND ((e.creditos_aprobados::DECIMAL / u.creditos_totales_programa) * 100) >= COALESCE(c.porcentaje_creditos_minimo, 40)
-                        AND NOT EXISTS (
-                            SELECT 1 
-                            FROM sanciones_disciplinarias sd
-                            WHERE sd.id_estudiante = e.id_estudiante
-                            AND (sd.fecha_fin IS NULL OR sd.fecha_fin >= CURRENT_DATE)
-                        );"""
-                
-            # Cargar datos en un DataFrame y mostrar la tabla visualmente
-            cursor.execute(query, (estudiante_id,))
+            cursor.execute(
+                "SELECT id_unidad, nombre FROM unidades_organizacionales WHERE tipo = 'Facultad' AND id_unidad_padre = %s ORDER BY nombre;",
+                (sede_id,)
+            )
+            facultades = cursor.fetchall()
             cursor.close()
-            df_estudiantes = pd.read_sql(query, conn)
             conn.close()
-            st.success("¡Postulación registrada con éxito!")
+        except Exception as e:
+            st.error(f"Error al cargar Facultades: {e}")
+
+    with col_fac:
+        if facultades:
+            facultad_seleccionada = st.selectbox(
+                "Facultad *",
+                options=facultades,
+                format_func=lambda f: f[1],
+                key="select_facultad"
+            )
+            facultad_id = facultad_seleccionada[0] if facultad_seleccionada else None
+        else:
+            st.selectbox("Facultad *", options=["Sin facultades disponibles"], disabled=True)
+            facultad_id = None
+
+    # Cargar Programas de la Facultad seleccionada (directos o a través de un departamento)
+    programas = []
+    if facultad_id:
+        try:
+            conn = obtener_conexion()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT p.id_unidad, p.nombre, p.creditos_totales_programa 
+                FROM unidades_organizacionales p 
+                LEFT JOIN unidades_organizacionales d ON p.id_unidad_padre = d.id_unidad 
+                WHERE p.tipo = 'Programa' AND (p.id_unidad_padre = %s OR d.id_unidad_padre = %s) 
+                ORDER BY p.nombre;
+                """,
+                (facultad_id, facultad_id)
+            )
+            programas = cursor.fetchall()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            st.error(f"Error al cargar Programas: {e}")
+
+    with col_prog:
+        if programas:
+            programa_seleccionado = st.selectbox(
+                "Programa Académico *",
+                options=programas,
+                format_func=lambda p: f"{p[1]} ({p[2]} cr. tot.)" if p[2] else p[1],
+                key="select_programa"
+            )
+            programa_id = programa_seleccionado[0] if programa_seleccionado else None
+            creditos_totales = programa_seleccionado[2] if programa_seleccionado else None
+        else:
+            st.selectbox("Programa Académico *", options=["Sin programas disponibles"], disabled=True)
+            programa_id = None
+            creditos_totales = None
+
+    if programa_id:
+        st.info(f" **Programa Seleccionado:** {programa_seleccionado[1]} | **ID Unidad:** `{programa_id}` | **Créditos Totales del Programa:** `{creditos_totales if creditos_totales else 'No especificado'}`")
+    else:
+        st.warning("Por favor selecciona una Sede, Facultad y Programa para continuar.")
+        return
+
+    st.markdown("---")
+    st.subheader("2. Información del Estudiante")
+
+    # Formulario para datos del estudiante
+    with st.form("form_estudiante_postulacion"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            estudiante_id = st.number_input(
+                "Documento de Identidad (CC / TI) *",
+                min_value=0,
+                step=1,
+                help="Ingresa tu número de documento sin puntos ni comas."
+            )
+            nombre_estudiante = st.text_input(
+                "Nombre(s) *",
+                placeholder="Ej. Juan Andrés"
+            )
+            apellidos_estudiante = st.text_input(
+                "Apellidos *",
+                placeholder="Ej. Pérez Gómez"
+            )
+
+        with col2:
+            correo_institucional = st.text_input(
+                "Correo Institucional *",
+                placeholder="usuario@unal.edu.co"
+            )
+            papa_acumulado = st.number_input(
+                "PAPA Acumulado *",
+                min_value=0.0,
+                max_value=5.0,
+                step=0.01,
+                format="%.2f",
+                help="Promedio Académico Ponderado Acumulado (0.00 a 5.00)"
+            )
+            creditos_aprobados = st.number_input(
+                "Créditos Aprobados *",
+                min_value=0,
+                step=1,
+                help="Número total de créditos aprobados a la fecha"
+            )
+
+        st.caption("Nota: Los campos marcados con (*) son obligatorios.")
+        btn_envio = st.form_submit_button("💾 Guardar Datos y Buscar Convocatorias", use_container_width=True)
+
+    # 3. Validación y Guardado en Base de Datos
+    if btn_envio:
+        # Validaciones de campos obligatorios
+        errores = []
+        if estudiante_id <= 0:
+            errores.append("El Documento de Identidad debe ser un número mayor a 0.")
+        if not nombre_estudiante.strip():
+            errores.append("El campo Nombre(s) es obligatorio.")
+        if not apellidos_estudiante.strip():
+            errores.append("El campo Apellidos es obligatorio.")
+        if not correo_institucional.strip():
+            errores.append("El Correo Institucional es obligatorio.")
+        elif "@" not in correo_institucional:
+            errores.append("Ingresa un Correo Institucional válido (ej. usuario@unal.edu.co).")
+
+        if errores:
+            for error in errores:
+                st.error(f" {error}")
+            return
+
+        try:
+            conn = obtener_conexion()
+            cursor = conn.cursor()
+
+            # Insertar o actualizar estudiante (UPSERT)
+            query_upsert = """
+                INSERT INTO estudiantes (
+                    id_estudiante, id_unidad_organizacional, nombre, apellidos, 
+                    correo_institucional, papa_acumulado, creditos_aprobados
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id_estudiante) DO UPDATE SET
+                    id_unidad_organizacional = EXCLUDED.id_unidad_organizacional,
+                    nombre = EXCLUDED.nombre,
+                    apellidos = EXCLUDED.apellidos,
+                    correo_institucional = EXCLUDED.correo_institucional,
+                    papa_acumulado = EXCLUDED.papa_acumulado,
+                    creditos_aprobados = EXCLUDED.creditos_aprobados;
+            """
+            cursor.execute(
+                query_upsert,
+                (
+                    estudiante_id,
+                    programa_id,
+                    nombre_estudiante.strip(),
+                    apellidos_estudiante.strip(),
+                    correo_institucional.strip(),
+                    papa_acumulado,
+                    creditos_aprobados
+                )
+            )
+            conn.commit()
+            st.success("Datos del estudiante guardados y actualizados con éxito en la base de datos")
+
+            # 4. Consultar convocatorias disponibles para el estudiante
+            query_convocatorias = """
+                SELECT 
+                    c.id_convocatoria AS "ID",
+                    c.nombre_convocatoria AS "Convocatoria",
+                    conv.codigo_convenio AS "Código Convenio",
+                    us.nombre_oficial AS "Universidad Socia",
+                    COALESCE(p.nombre_oficial, 'No especificado') AS "País",
+                    c.periodo_academico AS "Periodo",
+                    COALESCE(c.papa_minimo_requerido, 3.5) AS "PAPA Mínimo",
+                    COALESCE(c.porcentaje_creditos_minimo, 40) AS "Porcentaje Créditos Mínimo",
+                    c.fecha_cierre AS "Fecha Cierre"
+                FROM convocatorias c
+                JOIN convenios conv ON conv.id_convenio = c.id_convenio
+                JOIN universidades_socias us ON us.id_universidad = conv.id_universidad
+                LEFT JOIN paises p ON p.id_pais = us.pais
+                JOIN unidades_organizacionales u ON u.id_unidad = %s
+                WHERE 
+                    %s >= GREATEST(COALESCE(c.papa_minimo_requerido, 3.5), 3.5)
+                    AND ((%s::DECIMAL / NULLIF(u.creditos_totales_programa, 0)) * 100) >= COALESCE(c.porcentaje_creditos_minimo, 40)
+                    AND (c.fecha_cierre IS NULL OR c.fecha_cierre >= CURRENT_DATE)
+                    AND conv.estado_legal = 'Activo'
+                    AND NOT EXISTS (
+                        SELECT 1 FROM sanciones_disciplinarias sd
+                        WHERE sd.id_estudiante = %s
+                          AND (sd.fecha_fin IS NULL OR sd.fecha_fin >= CURRENT_DATE)
+                    )
+                ORDER BY c.fecha_cierre ASC;
+            """
+            cursor.execute(query_convocatorias, (programa_id, papa_acumulado, creditos_aprobados, estudiante_id))
+            columnas = [desc[0] for desc in cursor.description]
+            filas = cursor.fetchall()
+
+            cursor.close()
+            conn.close()
+
+            st.markdown("### Convocatorias Habilitadas para Ti")
+            if filas:
+                df_convocatorias = pd.DataFrame(filas, columns=columnas)
+                st.metric("Convocatorias disponibles", len(df_convocatorias))
+                st.dataframe(df_convocatorias, use_container_width=True)
+            else:
+                st.warning(" No se encontraron convocatorias activas que cumplan con tus requisitos académicos actuales (PAPA o % de créditos mínimos).")
+
+        except Exception as e:
+            st.error(f"Error al procesar la solicitud: {e}")
