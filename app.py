@@ -52,7 +52,7 @@ with tab2:
         [
             "Ver Convocatorias",
             "Ver Convenios",
-            "📊 Reportes y Estadísticas",
+            "Reportes y Estadísticas",
             "Nueva Postulación",
         ],
         key="menu_convocatorias",
@@ -62,7 +62,7 @@ with tab2:
         mostrar_convocatorias(obtener_conexion)
     elif opcion == "Ver Convenios":
         mostrar_convenios(obtener_conexion)
-    elif opcion == "📊 Reportes y Estadísticas":
+    elif opcion == "Reportes y Estadísticas":
         mostrar_reportes(obtener_conexion)
     elif opcion == "Nueva Postulación":
         mostrar_postulacion(obtener_conexion)

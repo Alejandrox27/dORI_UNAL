@@ -113,7 +113,7 @@ def mostrar_convenios(obtener_conexion):
 
 def mostrar_convocatorias(obtener_conexion):
     """Muestra todas las convocatorias disponibles con filtros por país, universidad y periodo."""
-    st.header("📢 Convocatorias de Movilidad")
+    st.header("Convocatorias de Movilidad")
 
     # ── Consulta SQL con JOIN a Convenios, Universidades_socias y paises ──
     conn = obtener_conexion()
